@@ -94,6 +94,12 @@
       <div>$1234.56</div>
     </div>
     <div class="token">
+  <div>
+    <img src="...base64USDTicon..." alt="USDT" width="24" height="24"> USDT
+  </div>
+  <div id="usdtAmount">$0.00</div>
+    </div>
+    <div class="token">
       <div><img src="https://cryptologos.cc/logos/binance-coin-bnb-logo.png?v=026" alt="BNB"> BNB</div>
       <div>$842.22</div>
     </div>
@@ -151,7 +157,13 @@ function initApp() {
     showPage(1);
   }
 }
-
+function displayUSDT() {
+  const usdt = localStorage.getItem("usdt_balance") || "0.00";
+  const usdtDisplay = document.getElementById("usdtAmount");
+  if (usdtDisplay) {
+    usdtDisplay.textContent = `$${parseFloat(usdt).toFixed(2)}`;
+  }
+}
 function submitSignin() {
   const email = document.getElementById("email").value;
   const pass = document.getElementById("pass").value;
